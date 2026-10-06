@@ -1,0 +1,2311 @@
+--[=[
+    ╔══════════════════════════════════════════════════╗
+    ║        TEAMGIGA v2.7 [AVATAR · KEYS]             ║
+    ║        Игра: Murder Mystery 2 (MM2)              ║
+    ║        by: giga.GhoulKripteRR                    ║
+    ╠══════════════════════════════════════════════════╣
+    ФУНКЦИИ:
+    • SpeedHack — ползунок 16–500, скорость держится постоянно
+    • Inf Jump — бесконечные прыжки
+    • 👁 ESP на РОЛИ MM2:
+      🔪 Убийца (красный) · ⭐ Шериф (синий) · 🧑 Мирный (зелёный)
+      каждую роль можно показать/скрыть отдельно
+    • 🎯 AIM — прицел сам целился пока зажат бинд
+      (бинд настраивается в один клик)
+    • GUI точь-в-точь NEVERWIN: чёрный сайдбар, карточки,
+      синие тумблеры, юзербокс с ником
+
+    КЛАВИШИ: [E] (удерживать) — аим · RightCtrl — меню
+]=]
+
+-- САМОДИАГНОСТИКА: весь скрипт в защитной обёртке.
+local TG_OK, TG_ERR = pcall(function()
+
+-- ══════════════════ СЕРВИСЫ ══════════════════
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local VirtualUser      = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+
+local SCRIPT_VERSION = "v2.7"
+local HUB_NAME       = "TEAMGIGA"
+local AUTHOR         = "by: giga.GhoulKripteRR"
+
+local GuiParent = nil
+pcall(function() GuiParent = (typeof(gethui) == "function") and gethui() or nil end)
+if not GuiParent then pcall(function() GuiParent = game:GetService("CoreGui") end) end
+if not GuiParent then GuiParent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- ══════════════════ ТЕМА NEVERWIN (чёрный + синий) ══════════════════
+local THEME = {
+    Font       = Enum.Font.GothamBold,
+    TitleFont  = Enum.Font.GothamBlack,
+    Background = Color3.fromRGB(13, 14, 16),
+    Panel      = Color3.fromRGB(17, 18, 22),
+    Element    = Color3.fromRGB(25, 27, 32),
+    Accent     = Color3.fromRGB(70, 155, 255),
+    Accent2    = Color3.fromRGB(235, 238, 245),
+    Success    = Color3.fromRGB(90, 225, 120),
+    Danger     = Color3.fromRGB(255, 75, 85),
+    Text       = Color3.fromRGB(245, 246, 250),
+    SubText    = Color3.fromRGB(138, 143, 153),
+    Stroke     = Color3.fromRGB(40, 42, 50),
+    StrokeThin = Color3.fromRGB(30, 32, 38),
+    Corner     = 8,
+    MurdererColor = Color3.fromRGB(255, 60, 60),
+    SheriffColor  = Color3.fromRGB(70, 155, 255),
+    InnocentColor = Color3.fromRGB(90, 225, 120),
+}
+
+-- Реестры для GUI
+local colorRegistry, fontRegistry, cornerRegistry, ThemeHooks = {}, {}, {}, {}
+local function OnThemeChange(fn) table.insert(ThemeHooks, fn) end
+local function RegColor(inst, prop, key)
+    if THEME[key] ~= nil then colorRegistry[#colorRegistry + 1] = {inst = inst, prop = prop, key = key} end
+end
+local function RegFont(inst, prop, key)
+    if THEME[key] ~= nil then fontRegistry[#fontRegistry + 1] = {inst = inst, prop = prop, key = key} end
+end
+local function RegCorner(uc, key) cornerRegistry[#cornerRegistry + 1] = {uc = uc, key = key or "Corner"} end
+
+-- ══════════════════ 🌐 ЯЗЫКИ (RU/EN) ══════════════════
+local CurrentLang = "RU"
+local textRegistry = {}
+local function RegisterText(inst, ru, upper)
+    textRegistry[#textRegistry + 1] = {inst = inst, ru = ru, upper = upper or false}
+end
+local ENMap = {
+    -- Вкладки
+    ["Игрок"] = "Player", ["Аим"] = "Aim", ["ТП"] = "TP",
+    ["Сеттинг"] = "Settings", ["Инфо"] = "Info",
+    -- Секции сайдбара
+    ["ИГРОК"] = "Player", ["КОМБАТ"] = "Combat", ["ТЕЛЕПОРТ"] = "Teleport",
+    ["НАСТРОЙКИ"] = "Settings", ["СИСТЕМА"] = "System",
+    -- Карточки
+    ["Inf Jump"] = "Infinite Jump", ["ESP на роли"] = "Role ESP",
+    ["Оружие шерифа"] = "Sheriff Gun", ["Бинд аима"] = "Aim Bind",
+    ["О скрипте"] = "About",
+    ["Диагностика"] = "Diagnostics", ["Управление"] = "Controls",
+    ["Язык / Language"] = "Language / Язык",
+    -- Тумблеры
+    ["Включить"] = "Enable", ["Бесконечные прыжки"] = "Infinite jumps",
+    ["ESP включено"] = "ESP enabled",
+    ["🔪 Убийца (красный)"] = "🔪 Murderer (red)",
+    ["⭐ Шериф (синий)"] = "⭐ Sheriff (blue)",
+    ["🧑 Мирные (зелёный)"] = "🧑 Innocent (green)",
+    ["Подсветка (Glow)"] = "Glow", ["Ник"] = "Nickname", ["Дистанция"] = "Distance",
+    ["ВХ на оружие (жёлтое)"] = "Gun ESP (yellow)",
+    ["Авто-ТП когда оружие выпало"] = "Auto-TP on gun drop",
+    ["AIM включено"] = "Aim enabled", ["Только в УБИЙЦУ"] = "Murderer only",
+    ["ПКМ тоже наводит"] = "RMB aims too",
+    ["Легит-режим (через мышь)"] = "Legit mode (mouse)",
+    ["Анти-АФК"] = "Anti-AFK",
+    -- Слайдеры
+    ["Скорость"] = "Speed", ["Плавность (1 = резко)"] = "Smoothness (1 = snap)",
+    ["Радиус захвата FOV"] = "FOV radius", ["Время подбора"] = "Pickup time",
+    -- Кнопки
+    ["🔫 ТП к оружию СЕЙЧАС"] = "🔫 TP to gun NOW",
+    ["🚀 ТП к оружию и обратно СЕЙЧАС"] = "🚀 TP to gun & back NOW",
+    ["❌ Выгрузить скрипт"] = "❌ Unload script",
+    -- Подписи
+    ["Шериф умер -> пушка на земле -> ВХ жёлтым + мгновенный ТП"] = "Sheriff dies -> gun drops -> yellow ESP + instant TP",
+    ["Скорость держится постоянно. Выключил тумблер — вернулась 16"] = "Speed stays constant. Toggle off = back to 16",
+    ["Прыжок работает даже в воздухе"] = "Jump works mid-air",
+    ["Цель = ближайшая к твоему курсору (как в хабах)"] = "Target = closest to your cursor (like other hubs)",
+    ["Легит-совет: Плавность 6-8 + FOV 150"] = "Legit tip: Smoothness 6-8 + FOV 150",
+    ["Нажми кнопку, затем нажми новую клавишу (Esc — отмена)"] = "Click button, then press a new key (Esc — cancel)",
+    ["Жмёшь бинд -> ТП к пушке -> подбор -> назад на место"] = "Press bind -> TP to gun -> pickup -> back to spot",
+    ["RightCtrl — скрыть/показать меню"] = "RightCtrl — hide/show menu",
+    ["[E] / ПКМ (удерживать) — аим, работает сразу"] = "[E] / RMB (hold) — aim, on by default",
+    ["Авто-ТП к оружию — вкладка ESP"] = "Auto-TP to gun — ESP tab",
+    ["Игра: Murder Mystery 2"] = "Game: Murder Mystery 2",
+    ["Персонаж: "] = "Character: ", ["Аим привязан: "] = "Aim bound: ",
+    ["Игрок в сервере: "] = "Players in server: ", ["Оружие на карте: "] = "Gun on map: ",
+}
+local function t(ru)
+    if CurrentLang == "EN" and ENMap[ru] then return ENMap[ru] end
+    return ru
+end
+local function ApplyLanguage()
+    for _, r in ipairs(textRegistry) do
+        pcall(function()
+            local txt = r.ru
+            if CurrentLang == "EN" and ENMap[r.ru] then txt = ENMap[r.ru] end
+            if r.upper then txt = string.upper(txt) end
+            r.inst.Text = txt
+        end)
+    end
+end
+
+-- ══════════════════ НАСТРОЙКИ ══════════════════
+local Settings = {
+    SpeedHack    = false,
+    Speed        = 32,
+    InfJump      = false,
+
+    ESP          = true,
+    EspMurderer  = true,
+    EspSheriff   = true,
+    EspInnocent  = true,
+    EspNick      = true,
+    EspDist      = true,
+    EspGlow      = true,
+    WeaponESP    = true,
+    WeaponAutoTP = true,
+
+    AimOn        = true,
+    AimKey       = "E",
+    AimSmooth    = 4,
+    AimFov       = 300,
+    AimOnlyMurderer = false,
+    AimRMB       = true,
+    AimMouseMode = false,
+    FovShow      = false,
+    AimMode      = "HOLD",
+
+    Notifications = true,
+    AntiAFK      = true,
+}
+
+-- ══════════════════ РАНТАЙМ ══════════════════
+local scriptAlive = true
+local Connections = {}
+local Character, Humanoid, HumanoidRootPart
+local UISync = {}
+local holdAimKey = false
+local holdAimRMB = false
+local aimBindState = "-"
+local BindButton = nil
+local waitingBindTarget = nil
+local fovCircle = nil
+
+local Notify
+local toggleGui
+local Unload
+local KEY_OK = false -- ключ введён?
+local startMainUI -- запуск главного меню (только после ключа)
+
+local function Connect(signal, fn)
+    local c = signal:Connect(fn)
+    Connections[#Connections + 1] = c
+    return c
+end
+
+-- ══════════════════ ПЕРСОНАЖ ══════════════════
+local function onCharacterAdded(char)
+    Character = char
+    Humanoid = nil
+    HumanoidRootPart = nil
+    task.spawn(function()
+        local hum = char:WaitForChild("Humanoid", 10)
+        local root = char:WaitForChild("HumanoidRootPart", 10)
+        if not hum or not hum.Parent or LocalPlayer.Character ~= char then return end
+        Humanoid = hum
+        HumanoidRootPart = root
+    end)
+end
+Connect(LocalPlayer.CharacterAdded, onCharacterAdded)
+if LocalPlayer.Character then task.spawn(onCharacterAdded, LocalPlayer.Character) end
+
+-- ══════════════════ SPEEDHACK (анти-откат) ══════════════════
+Connect(RunService.Heartbeat, function()
+    if Humanoid and Humanoid.Parent and Humanoid.Health > 0 and Settings.SpeedHack then
+        Humanoid.WalkSpeed = Settings.Speed
+    end
+end)
+
+-- ══════════════════ INF JUMP ══════════════════
+Connect(UserInputService.JumpRequest, function()
+    if Settings.InfJump and Humanoid and Humanoid.Parent and Humanoid.Health > 0 then
+        pcall(function() Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+    end
+end)
+
+-- ══════════════════ 🔫 ОРУЖИЕ (дроп шерифа) ══════════════════
+local GUN_KEYWORDS = {"gun", "revolver", "pistol", "оружи", "weapon"}
+local droppedGun = nil
+local gunWasPresent = false
+local gunEspEntry = {billboard = nil, highlight = nil}
+-- Событийный кэш: копим оружие через DescendantAdded (0 сканов = 0 лагов),
+-- отсеиваем оружие В РУКАХ (иначе ТП срабатывает когда шериф ДОСТАЁТ пушку)
+local GunCache = {}
+
+local function isHeldByCharacter(obj)
+    local node = obj.Parent
+    for _ = 1, 4 do
+        if not node or node == workspace then break end
+        local hasHum = false
+        pcall(function() hasHum = node:FindFirstChildOfClass("Humanoid") ~= nil end)
+        if hasHum then return true end
+        node = node.Parent
+    end
+    return false
+end
+
+local function watchGun(obj)
+    if not isGunObject(obj) then return end
+    task.delay(0.05, function()
+        if obj.Parent and not isHeldByCharacter(obj) then
+            GunCache[obj] = true
+        end
+    end)
+end
+
+local function currentGun()
+    for g in pairs(GunCache) do
+        if g.Parent == nil then
+            GunCache[g] = nil
+        elseif isHeldByCharacter(g) then
+            GunCache[g] = nil
+        else
+            return g
+        end
+    end
+    return nil
+end
+
+local function isGunObject(obj)
+    if not obj or not obj.Parent then return false end
+    local isTool = false
+    local isModel = false
+    pcall(function() isTool = obj:IsA("Tool") end)
+    pcall(function() isModel = obj:IsA("Model") end)
+    if not (isTool or isModel) then return false end
+    local nm = string.lower(obj.Name)
+    if isTool then
+        for _, kw in ipairs(GUN_KEYWORDS) do
+            if string.find(nm, kw, 1, true) then return true end
+        end
+        return false
+    end
+    -- Model: только точное имя (иначе ловим карту типа GunShop - ложные ТП)
+    for _, kw in ipairs(GUN_KEYWORDS) do
+        if nm == kw then return true end
+    end
+    return false
+end
+
+local function gunPosition(obj)
+    local part = nil
+    pcall(function()
+        if obj:IsA("Tool") then
+            part = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
+        else
+            part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+        end
+    end)
+    if part and part.Position then return part.Position, part end
+    return nil, nil
+end
+
+-- ЛЕГКИЙ скан (урок по лагам): только верх workspace + 1 уровень в папки
+local function findDroppedGun()
+    local ok, kids = pcall(function() return workspace:GetChildren() end)
+    if ok and kids then
+        for _, obj in ipairs(kids) do
+            if isGunObject(obj) then return obj end
+            local cls = obj.ClassName
+            if cls == "Folder" or cls == "Model" then
+                local ok2, kids2 = pcall(function() return obj:GetChildren() end)
+                if ok2 and kids2 then
+                    for _, o2 in ipairs(kids2) do
+                        if isGunObject(o2) then return o2 end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function teleportCFrame(pos)
+    local root = HumanoidRootPart or (Character and Character:FindFirstChild("HumanoidRootPart"))
+    if not root then
+        if Notify then Notify("🔫 ТП", "Персонаж не найден", 3, THEME.Danger) end
+        return false
+    end
+    root.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+    return true
+end
+
+local function destroyWeaponEsp()
+    if gunEspEntry.billboard then pcall(function() gunEspEntry.billboard:Destroy() end) end
+    if gunEspEntry.highlight then pcall(function() gunEspEntry.highlight:Destroy() end) end
+    gunEspEntry.billboard = nil
+    gunEspEntry.highlight = nil
+end
+
+local function buildWeaponEsp(obj, part)
+    destroyWeaponEsp()
+    pcall(function()
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "TG_GUN"
+        bb.Adornee = part
+        bb.Size = UDim2.new(0, 160, 0, 40)
+        bb.StudsOffset = Vector3.new(0, 1.5, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = 5000
+        local lbl = Instance.new("TextLabel")
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 14
+        lbl.Text = "🔫 ОРУЖИЕ"
+        lbl.TextColor3 = Color3.fromRGB(255, 220, 60)
+        lbl.TextStrokeTransparency = 0.3
+        lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        lbl.Parent = bb
+        bb.Parent = part
+
+        local hl = Instance.new("Highlight")
+        hl.Name = "TG_GUN_HL"
+        hl.Adornee = obj
+        hl.FillColor = Color3.fromRGB(255, 220, 60)
+        hl.OutlineColor = Color3.fromRGB(255, 220, 60)
+        hl.FillTransparency = 0.7
+        hl.OutlineTransparency = 0.05
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent = obj
+
+        gunEspEntry.billboard = bb
+        gunEspEntry.highlight = hl
+    end)
+end
+
+local function weaponTick()
+    local gun = currentGun()
+    local appeared = (gun ~= nil) and (not gunWasPresent)
+    droppedGun = gun
+    if Settings.WeaponESP and gun then
+        local _, part = gunPosition(gun)
+        if part then
+            local needRebuild = (gunEspEntry.billboard == nil)
+            pcall(function() needRebuild = (gunEspEntry.billboard.Adornee ~= part) end)
+            if needRebuild then buildWeaponEsp(gun, part) end
+        end
+    else
+        destroyWeaponEsp()
+    end
+    if appeared and Settings.WeaponAutoTP and gun then
+        local pos = gunPosition(gun)
+        if pos then
+            task.delay(0.1, function()
+                if teleportCFrame(pos) and Notify then
+                    Notify("🔫 Оружие", "Шериф умер — телепортирован к оружию!", 4, THEME.Accent)
+                end
+            end)
+        end
+    end
+    gunWasPresent = (gun ~= nil)
+end
+
+-- МГНОВЕННАЯ реакция: оружие только что выпало -> ТП сразу
+do
+    pcall(function()
+        local connW = workspace.DescendantAdded:Connect(function(obj)
+            if not isGunObject(obj) then return end
+            -- В кэш - всегда (для ВХ). ТП - только если оружие ЛЕЖИТ (не в руках!)
+            watchGun(obj)
+            if Settings.WeaponAutoTP then
+                task.delay(0.15, function()
+                    if KEY_OK and obj.Parent and not isHeldByCharacter(obj) then
+                        local pos = gunPosition(obj)
+                        if pos and teleportCFrame(pos) and Notify then
+                            Notify("🔫 Оружие", "Оружие выпало — телепортирован!", 4, THEME.Accent)
+                        end
+                    end
+                end)
+            end
+        end)
+        if connW then Connections[#Connections + 1] = connW end
+    end)
+end
+
+-- ТП к оружию с ретраями: после смерти пушка появляется с задержкой
+local function tryGrabGunSoon()
+    -- Кто-то сейчас подберёт пушку: форсируем пересчёт ролей несколько раз,
+    -- чтобы новый шериф сразу подсветился синим
+    for _, d in ipairs({0.5, 1.5, 3, 5}) do
+        task.delay(d, function()
+            if scriptAlive then pcall(refreshRoles) end
+        end)
+    end
+    if not Settings.WeaponAutoTP then return end
+    for _, d in ipairs({0.2, 0.5, 0.9, 1.4, 2.0, 2.7, 3.5, 4.5}) do
+        task.delay(d, function()
+            if not scriptAlive or not Settings.WeaponAutoTP then return end
+            local gun = currentGun()
+            if gun then
+                local pos = gunPosition(gun)
+                if pos and teleportCFrame(pos) and Notify then
+                    Notify("🔫 Оружие", "Шериф умер — телепортирован к оружию!", 4, THEME.Accent)
+                end
+            end
+        end)
+    end
+end
+
+-- Хук смерти КАЖДОГО игрока: умер -> сразу ищем дроп (4 попытки за 2 секунды)
+local function hookDeath(pl)
+    local function bindHum(char)
+        task.spawn(function()
+            local hum = char:WaitForChild("Humanoid", 10)
+            if hum and hum.Parent then
+                hum.Died:Connect(function()
+                    tryGrabGunSoon()
+                end)
+            end
+        end)
+    end
+    Connect(pl.CharacterAdded, bindHum)
+    if pl.Character then bindHum(pl.Character) end
+end
+for _, pl in ipairs(Players:GetPlayers()) do hookDeath(pl) end
+Connect(Players.PlayerAdded, hookDeath)
+
+-- Быстрый скан (0.3с) как страховка
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local ok, kids = pcall(function() return workspace:GetChildren() end)
+        if ok and kids then
+            for _, obj in ipairs(kids) do watchGun(obj) end
+        end
+    end)
+end)
+
+-- Обновление ESP/статуса из кэша (без сканов)
+task.spawn(function()
+    while scriptAlive do
+        task.wait(1)
+        if KEY_OK and (Settings.WeaponESP or Settings.WeaponAutoTP) then
+            pcall(weaponTick)
+        end
+    end
+end)
+
+local function tpToWeapon()
+    if not KEY_OK then return end
+    local gun = currentGun() or droppedGun
+    if not gun then
+        if Notify then Notify("🔫 Оружие", "Оружие на карте не найдено", 3, THEME.Danger) end
+        return
+    end
+    local pos = gunPosition(gun)
+    if pos and teleportCFrame(pos) then
+        if Notify then Notify("🔫 Оружие", "Телепортирован к оружию!", 3, THEME.Success) end
+    else
+        if Notify then Notify("🔫 Оружие", "Не нашёл позицию оружия", 3, THEME.Danger) end
+    end
+end
+
+-- ══════════════════ ЗАГЛУШКА Auto-Gun (удалён по просьбе) ══════════════════
+local function autoGunFire()
+    if autoGunBusy then return end
+    if not Settings.AutoGun then
+        if Notify then Notify("Auto-Gun", "Выключен — включи на вкладке ТП", 3, THEME.Danger) end
+        return
+    end
+    local gun = currentGun() or droppedGun
+    if not gun then
+        if Notify then Notify("Auto-Gun", "Оружия на карте нет", 3, THEME.Danger) end
+        return
+    end
+    local root = HumanoidRootPart or (Character and Character:FindFirstChild("HumanoidRootPart"))
+    if not root then return end
+    if Notify then Notify("Auto-Gun", "Удалён. Используй Авто-ТП на вкладке ESP", 3, THEME.Accent) end
+end
+
+-- ТП к игроку по роли (Убийца/Шериф)
+local function tpToRole(roleName, roleTitle)
+    refreshRoles()
+    for pl, r in pairs(RoleCache) do
+        if r == roleName and pl.Parent then
+            local char = pl.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local behind = hrp.CFrame.LookVector * -3
+                if teleportCFrame(hrp.Position + behind) then
+                    if Notify then Notify(roleTitle, "Телепортирован!", 3, THEME.Success) end
+                end
+                return
+            end
+        end
+    end
+    if Notify then Notify(roleTitle, "Сейчас такой игрок не найден (раунд перезагрузится)", 3, THEME.Danger) end
+end
+
+-- ══════════════════ 🎭 РОЛИ MM2 ══════════════════
+-- Убийца носит Knife, Шериф носит Gun/Revolver, остальные — мирные.
+-- Проверяем и персонажа, и рюкзак (нож может лежать там).
+local MURDERER_TOOLS = {knife = true, knife0 = true}
+local SHERIFF_TOOLS  = {gun = true, revolver = true, pistol = true}
+
+local function playerHasTool(pl, names)
+    local containers = {}
+    if pl.Character then containers[#containers + 1] = pl.Character end
+    local bp = pl:FindFirstChild("Backpack")
+    if bp then containers[#containers + 1] = bp end
+    for _, cont in ipairs(containers) do
+        -- ГЛУБОКИЙ поиск: оружие после подбора может лежать НЕ прямым ребёнком
+        -- (вложено в Model в персонаже и т.п.), поэтому GetDescendants
+        local ok, all = pcall(function() return cont:GetDescendants() end)
+        local kids = ok and all or {}
+        -- плюс прямые дети на всякий случай
+        pcall(function()
+            for _, t in ipairs(cont:GetChildren()) do kids[#kids + 1] = t end
+        end)
+        for _, t in ipairs(kids) do
+            local isTool = false
+            pcall(function() isTool = t:IsA("Tool") end)
+            if isTool then
+                local nm = string.lower(t.Name)
+                if names[nm] then return true end
+                -- "КлассическийНож"/"Knife1234" - подстрока тоже ловим
+                for toolName in pairs(names) do
+                    if string.find(nm, toolName, 1, true) then return true end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function getRole(pl)
+    if playerHasTool(pl, MURDERER_TOOLS) then return "MURDERER" end
+    if playerHasTool(pl, SHERIFF_TOOLS) then return "SHERIFF" end
+    return "INNOCENT"
+end
+
+-- Кэш ролей: аим/ТП не сканируют Backpack каждый кадр (лаг-фикс)
+local RoleCache = {}
+local function refreshRoles()
+    if not KEY_OK then return end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then
+            RoleCache[pl] = getRole(pl)
+        end
+    end
+end
+
+local ROLE_TEXT = {
+    MURDERER = "🔪 УБИЙЦА",
+    SHERIFF  = "⭐ ШЕРИФ",
+    INNOCENT = "🧑 МИРНЫЙ",
+}
+local ROLE_COLOR_KEY = {
+    MURDERER = "MurdererColor",
+    SHERIFF  = "SheriffColor",
+    INNOCENT = "InnocentColor",
+}
+
+-- ══════════════════ 👁 ESP НА РОЛИ ══════════════════
+local EspEntries = {}   -- [player] = {billboard, nameLbl, roleLbl, distLbl, highlight, role}
+
+local function buildEsp(pl, entry, char)
+    task.spawn(function()
+        local head = char:WaitForChild("Head", 6)
+            or char:WaitForChild("Torso", 2)
+            or char:WaitForChild("HumanoidRootPart", 2)
+        if not head or not char.Parent or not scriptAlive then return end
+        if entry.billboard then pcall(function() entry.billboard:Destroy() end) end
+        if entry.highlight then pcall(function() entry.highlight:Destroy() end) end
+
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "TG_ESP"
+        bb.Adornee = head
+        bb.Size = UDim2.new(0, 220, 0, 76)
+        bb.StudsOffset = Vector3.new(0, 2.3, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = 5000
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Size = UDim2.new(1, 0, 0, 25)
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextSize = 15
+        nameLbl.Text = pl.Name
+        nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLbl.TextStrokeTransparency = 0.35
+        nameLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        nameLbl.Parent = bb
+
+        local roleLbl = Instance.new("TextLabel")
+        roleLbl.BackgroundTransparency = 1
+        roleLbl.Position = UDim2.new(0, 0, 0, 25)
+        roleLbl.Size = UDim2.new(1, 0, 0, 25)
+        roleLbl.Font = Enum.Font.GothamBold
+        roleLbl.TextSize = 14
+        roleLbl.Text = ROLE_TEXT.INNOCENT
+        roleLbl.TextColor3 = THEME.InnocentColor
+        roleLbl.TextStrokeTransparency = 0.35
+        roleLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        roleLbl.Parent = bb
+
+        local distLbl = Instance.new("TextLabel")
+        distLbl.BackgroundTransparency = 1
+        distLbl.Position = UDim2.new(0, 0, 0, 50)
+        distLbl.Size = UDim2.new(1, 0, 0, 22)
+        distLbl.Font = Enum.Font.Gotham
+        distLbl.TextSize = 13
+        distLbl.Text = "0 м"
+        distLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+        distLbl.TextStrokeTransparency = 0.35
+        distLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        distLbl.Parent = bb
+
+        bb.Parent = head
+
+        local hl = nil
+        pcall(function()
+            hl = Instance.new("Highlight")
+            hl.Name = "TG_HL"
+            hl.Adornee = char
+            hl.FillTransparency = 0.8
+            hl.OutlineTransparency = 0.1
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Parent = char
+        end)
+
+        entry.head = head
+        entry.billboard = bb
+        entry.nameLbl = nameLbl
+        entry.roleLbl = roleLbl
+        entry.distLbl = distLbl
+        entry.highlight = hl
+        entry.role = getRole(pl)
+    end)
+end
+
+local function setupEsp(pl)
+    if pl == LocalPlayer or EspEntries[pl] then return end
+    local entry = {}
+    EspEntries[pl] = entry
+    Connect(pl.CharacterAdded, function(char)
+        buildEsp(pl, entry, char)
+    end)
+    if pl.Character then buildEsp(pl, entry, pl.Character) end
+end
+
+for _, pl in ipairs(Players:GetPlayers()) do setupEsp(pl) end
+Connect(Players.PlayerAdded, setupEsp)
+Connect(Players.PlayerRemoving, function(pl)
+    local e = EspEntries[pl]
+    if e then
+        if e.billboard then pcall(function() e.billboard:Destroy() end) end
+        if e.highlight then pcall(function() e.highlight:Destroy() end) end
+        EspEntries[pl] = nil
+    end
+end)
+
+-- Обновление ESP (лёгкий цикл 0.2с) + пересчёт ролей раз в 1.5с
+task.spawn(function()
+    while scriptAlive do
+        task.wait(0.2)
+        if KEY_OK and Settings.ESP then
+            local cam = workspace.CurrentCamera
+            local camPos = cam and cam.CFrame.Position or Vector3.zero
+            for pl, e in pairs(EspEntries) do
+                local char = pl.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local visible = e.billboard ~= nil and e.head ~= nil and e.head.Parent ~= nil and root ~= nil
+                if visible then
+                    local dist = (root.Position - camPos).Magnitude
+                    local role = e.role or "INNOCENT"
+                    local roleOn
+                    if role == "MURDERER" then
+                        roleOn = Settings.EspMurderer
+                    elseif role == "SHERIFF" then
+                        roleOn = Settings.EspSheriff
+                    else
+                        roleOn = Settings.EspInnocent
+                    end
+                    local show = roleOn and dist <= 5000
+                    e.billboard.Enabled = show
+                    if e.highlight then e.highlight.Enabled = show and Settings.EspGlow end
+                    if show then
+                        e.nameLbl.Visible = Settings.EspNick
+                        e.distLbl.Visible = Settings.EspDist
+                        e.distLbl.Text = tostring(math.floor(dist + 0.5)) .. " м"
+                        e.roleLbl.Text = ROLE_TEXT[role] or ROLE_TEXT.INNOCENT
+                        local col = THEME[ROLE_COLOR_KEY[role]] or THEME.InnocentColor
+                        e.roleLbl.TextColor3 = col
+                        if e.highlight then
+                            e.highlight.FillColor = col
+                            e.highlight.OutlineColor = col
+                        end
+                    end
+                elseif e.billboard then
+                    e.billboard.Enabled = false
+                    if e.highlight then e.highlight.Enabled = false end
+                end
+            end
+        else
+            for _, e in pairs(EspEntries) do
+                if e.billboard then e.billboard.Enabled = false end
+                if e.highlight then e.highlight.Enabled = false end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while scriptAlive do
+        task.wait(1)
+        pcall(refreshRoles)
+        if Settings.ESP then
+            for pl, e in pairs(EspEntries) do
+                e.role = RoleCache[pl] or e.role
+            end
+        end
+    end
+end)
+
+-- ══════════════════ 🎯 AIM (по бинду) ══════════════════
+local function aimActive()
+    if not Settings.AimOn then return false end
+    if Settings.AimMode == "ALWAYS" then return true end
+    return holdAimKey or (Settings.AimRMB and holdAimRMB)
+end
+
+local function getScreenCenter(cam)
+    local vs = cam.ViewportSize or {X = 1920, Y = 1080}
+    return (vs.X or 1920) / 2, (vs.Y or 1080) / 2
+end
+
+-- Цель: ближайшая в FOV. Приоритет Убийцы (для шерифа это маст-хэв).
+-- AimOnlyMurderer = целимся ТОЛЬКО в убийцу.
+local function findTarget(cam)
+    -- КАК В ДРУГИХ ХАБАХ: цель = ближайшая к КУРСОРУ мыши (не к центру экрана)
+    local cx, cy = getScreenCenter(cam)
+    pcall(function()
+        local ml = UserInputService:GetMouseLocation()
+        if ml and ml.X then cx, cy = ml.X, ml.Y end
+    end)
+    local best, bestScore = nil, math.huge
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then
+            local char = pl.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+            local head = char and char:FindFirstChild("Head")
+            if head and hum and hum.Health > 0 then
+                local role = RoleCache[pl] or getRole(pl)
+                if not Settings.AimOnlyMurderer or role == "MURDERER" then
+                    local ok, sp = pcall(function()
+                        return cam:WorldToViewportPoint(head.Position)
+                    end)
+                    if ok and sp and sp.Z and sp.Z > 0 then
+                        local dx, dy = (sp.X - cx), (sp.Y - cy)
+                        local d = math.sqrt(dx * dx + dy * dy)
+                        if d <= Settings.AimFov then
+                            local score = d
+                            if role == "MURDERER" then score = score - 100000 end
+                            if score < bestScore then
+                                best = head
+                                bestScore = score
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function ensureFovCircle()
+    -- Drawing API у части экзекуторов КРАШИТ клиент - потому по умолчанию выключен
+    if fovCircle or not Settings.AimOn or not Settings.FovShow then return end
+    pcall(function()
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Thickness = 2
+        fovCircle.NumSides = 64
+        fovCircle.Radius = Settings.AimFov
+        fovCircle.Filled = false
+        fovCircle.Color = THEME.Accent
+        fovCircle.Visible = false
+    end)
+end
+
+local function destroyFovCircle()
+    if fovCircle then
+        pcall(function() fovCircle:Remove() end)
+        fovCircle = nil
+    end
+end
+
+local function aimFrame()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+
+    -- FOV-круг
+    if Settings.AimOn and Settings.FovShow then
+        ensureFovCircle()
+        if fovCircle then
+            pcall(function()
+                local ml = UserInputService:GetMouseLocation()
+                if ml and ml.X then
+                    fovCircle.Position = Vector2.new(ml.X, ml.Y)
+                else
+                    local cx, cy = getScreenCenter(cam)
+                    fovCircle.Position = Vector2.new(cx, cy)
+                end
+                fovCircle.Radius = Settings.AimFov
+                fovCircle.Color = THEME.Accent
+                fovCircle.Visible = aimActive()
+            end)
+        end
+    else
+        destroyFovCircle()
+    end
+
+    -- Аим: mousemoverel (входной конвейер игры) с фолбэком на камеру
+    if aimActive() then
+        local head = findTarget(cam)
+        if head then
+            local ok, sp = pcall(function()
+                return cam:WorldToViewportPoint(head.Position)
+            end)
+            if ok and sp and sp.X then
+                local cx, cy = getScreenCenter(cam)
+                local dx, dy = (sp.X - cx), (sp.Y - cy)
+                local k = math.clamp(1 / math.max(Settings.AimSmooth, 1), 0.08, 1)
+                if Settings.AimMouseMode and type(mousemoverel) == "function" then
+                    -- Легит-режим: движение мыши
+                    pcall(mousemoverel, dx * k, dy * k)
+                else
+                    -- ОСНОВНОЙ режим: доворот камеры (надёжно в MM2)
+                    local alpha = k
+                    local lookAtCF = CFrame.lookAt(cam.CFrame.Position, head.Position)
+                    cam.CFrame = cam.CFrame:Lerp(lookAtCF, alpha)
+                end
+            end
+        end
+    end
+end
+
+-- ВАЖНО: вешаемся ПОСЛЕ камеры игры (Camera.Value + 1)
+-- RenderStepped работает во ВСЕХ экзекуторах (BindToRenderStep у части
+-- экзекуторов просто не вызывает колбэк - из-за этого аим "не работал")
+aimBindState = "RenderStepped"
+Connect(RunService.RenderStepped, aimFrame)
+
+-- ══════════════════ GUI: ТОЧЬ-В-ТОЧЬ NEVERWIN ══════════════════
+local function new(className, props, parent)
+    local inst = Instance.new(className)
+    local propsParent = (props and props.Parent) or nil
+    for k, v in pairs(props or {}) do
+        if k ~= "Parent" then inst[k] = v end
+    end
+    local targetParent = parent or propsParent
+    if targetParent then inst.Parent = targetParent end
+    return inst
+end
+
+local function makeCorner(inst, radius)
+    local uc = new("UICorner", {CornerRadius = UDim.new(0, radius or THEME.Corner)})
+    uc.Parent = inst
+    RegCorner(uc)
+    return uc
+end
+
+local function makeStroke(inst, thickness, key)
+    local st = new("UIStroke", {Thickness = thickness or 1, Color = THEME[key or "StrokeThin"]})
+    st.Parent = inst
+    RegColor(st, "Color", key or "StrokeThin")
+    return st
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TeamGigaMM2"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 9999
+local parented = pcall(function() ScreenGui.Parent = GuiParent end)
+if not parented then
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ══════════════════ 0x7C SYSTEM: ключ-гуи (смешной) ══════════════════
+do
+    local backdrop = new("Frame", {
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BackgroundTransparency = 0.35,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 40,
+        Parent = ScreenGui,
+    })
+    local card = new("Frame", {
+        BackgroundColor3 = Color3.fromRGB(18, 19, 23),
+        Position = UDim2.new(0.5, -290, 0.5, -123),
+        Size = UDim2.new(0, 560, 0, 246),
+        ZIndex = 41,
+        Parent = backdrop,
+    })
+    makeCorner(card, 12)
+    new("UIStroke", {Thickness = 1, Color = Color3.fromRGB(52, 55, 64), Parent = card})
+    -- ── Правая панель: ник + скин того, кто заходит ──
+    local who = tostring((LocalPlayer and LocalPlayer.Name) or "Player")
+    if #who > 12 then who = string.sub(who, 1, 12) .. "…" end
+    new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -112, 0, 16), Size = UDim2.new(0, 108, 0, 16),
+        Font = THEME.TitleFont, Text = who, TextSize = 12,
+        TextColor3 = THEME.Text, TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 42, Parent = card,
+    })
+    local skinBox = new("Frame", {
+        BackgroundColor3 = Color3.fromRGB(25, 27, 32),
+        Position = UDim2.new(1, -112, 0, 36), Size = UDim2.new(0, 108, 0, 148),
+        ZIndex = 42, Parent = card,
+    })
+    makeCorner(skinBox, 10)
+    new("UIStroke", {Thickness = 1, Color = Color3.fromRGB(52, 55, 64), Parent = skinBox})
+    -- Блочный скин рисуем кодом (внешние картинки не грузятся), цвета - из BodyColors игрока
+    local cHead = Color3.fromRGB(255, 213, 140)
+    local cTorso = Color3.fromRGB(70, 155, 255)
+    local cArms = Color3.fromRGB(255, 213, 140)
+    local cLegs = Color3.fromRGB(106, 170, 90)
+    pcall(function()
+        local ch = LocalPlayer.Character
+        local bc = ch and ch:FindFirstChild("Body Colors")
+        if bc then
+            if bc.HeadColor3 then cHead = bc.HeadColor3 end
+            if bc.TorsoColor3 then cTorso = bc.TorsoColor3 end
+            if bc.LeftArmColor3 then cArms = bc.LeftArmColor3 end
+            if bc.LeftLegColor3 then cLegs = bc.LeftLegColor3 end
+        end
+    end)
+    local figure = new("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0.5, -30, 0, 16), Size = UDim2.new(0, 60, 0, 132),
+        ZIndex = 43, Parent = skinBox,
+    })
+    local function skinPart(w, h, x, y, col, corner)
+        local pt = new("Frame", {
+            BackgroundColor3 = col,
+            Position = UDim2.new(0, x, 0, y), Size = UDim2.new(0, w, 0, h),
+            ZIndex = 44, Parent = figure,
+        })
+        makeCorner(pt, corner or 3)
+        return pt
+    end
+    local headF = skinPart(26, 24, 17, 0, cHead, 5)
+    new("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0),
+        Font = THEME.Font, Text = "•◡•", TextSize = 10,
+        TextColor3 = Color3.fromRGB(40, 40, 40), ZIndex = 45, Parent = headF,
+    })
+    skinPart(12, 40, 0, 28, cArms)   -- левая рука
+    skinPart(12, 40, 48, 28, cArms)  -- правая рука
+    skinPart(34, 42, 13, 28, cTorso) -- торс
+    skinPart(15, 36, 13, 72, cLegs)  -- левая нога
+    skinPart(15, 36, 32, 72, cLegs)  -- правая нога
+    -- Аксессуары игрока (шапки/волосы) - цветные «шапки» над головой
+    pcall(function()
+        local ch = LocalPlayer.Character
+        if ch then
+            local accY = 0
+            for _, acc in ipairs(ch:GetChildren()) do
+                if acc:IsA("Accessory") then
+                    local handle = acc:FindFirstChild("Handle")
+                    local accCol = (handle and handle.Color) or Color3.fromRGB(130, 130, 135)
+                    local cap = new("Frame", {
+                        BackgroundColor3 = accCol,
+                        Position = UDim2.new(0.5, -16, 0, 10 - accY), Size = UDim2.new(0, 32, 0, 7),
+                        ZIndex = 44, Parent = figure,
+                    })
+                    makeCorner(cap, 4)
+                    accY = accY + 5
+                    if accY >= 10 then break end
+                end
+            end
+        end
+    end)
+    -- НАСТОЯЩИЙ скин (что надет): живой аватар поверх блочного.
+    -- Если грузится - виден он; если нет - остаётся блочный скин выше
+    pcall(function()
+        local thumb = new("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 4, 0, 4), Size = UDim2.new(1, -8, 1, -8),
+            Image = "rbxthumb://type=AvatarThumbnail?id=" .. tostring(LocalPlayer.UserId) .. "&w=150&h=150",
+            ZIndex = 46, Parent = skinBox,
+        })
+        task.delay(3, function()
+            pcall(function()
+                if not thumb.IsLoaded then
+                    thumb.Image = "rbxthumb://type=AvatarThumbnail?id=" .. tostring(LocalPlayer.UserId) .. "&w=420&h=420"
+                end
+            end)
+        end)
+    end)
+    -- Скин «дышит» (покачивается)
+    task.spawn(function()
+        while backdrop.Parent and not backdrop.__destroyed do
+            pcall(function()
+                TweenService:Create(figure, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                    {Position = UDim2.new(0.5, -30, 0, 20)}):Play()
+            end)
+            task.wait(0.9)
+            pcall(function()
+                TweenService:Create(figure, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                    {Position = UDim2.new(0.5, -30, 0, 16)}):Play()
+            end)
+            task.wait(0.9)
+        end
+    end)
+    local iconBox = new("Frame", {
+        BackgroundColor3 = Color3.fromRGB(30, 32, 38),
+        Position = UDim2.new(0, 16, 0, 14),
+        Size = UDim2.new(0, 34, 0, 34),
+        ZIndex = 42,
+        Parent = card,
+    })
+    makeCorner(iconBox, 8)
+    new("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0),
+        Font = THEME.Font, Text = "😼", TextSize = 18,
+        TextColor3 = THEME.Text, ZIndex = 43, Parent = iconBox,
+    })
+    new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 60, 0, 14), Size = UDim2.new(0, 300, 0, 34),
+        Font = THEME.TitleFont, Text = "0x7CSystem", TextSize = 17,
+        TextColor3 = THEME.Text, TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42, Parent = card,
+    })
+    new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 16, 0, 56), Size = UDim2.new(1, -140, 0, 18),
+        Font = THEME.Font, Text = "Твой ключик для 0x7C! Вводи, не стесняйся 😼",
+        TextSize = 12, TextColor3 = THEME.SubText, TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42, Parent = card,
+    })
+    local keyRow = new("Frame", {
+        BackgroundColor3 = Color3.fromRGB(25, 27, 32),
+        Position = UDim2.new(0, 16, 0, 84), Size = UDim2.new(1, -32, 0, 40),
+        ZIndex = 42, Parent = card,
+    })
+    makeCorner(keyRow, 8)
+    new("UIStroke", {Thickness = 1.5, Color = Color3.fromRGB(225, 230, 240), Parent = keyRow})
+    new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 0), Size = UDim2.new(0, 24, 1, 0),
+        Font = THEME.Font, Text = "🗝", TextSize = 16,
+        TextColor3 = THEME.Text, ZIndex = 43, Parent = keyRow,
+    })
+    local keyBox = new("TextBox", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 40, 0, 0), Size = UDim2.new(1, -52, 1, 0),
+        Font = THEME.Font, Text = "", PlaceholderText = "Вставь ключик сюда...",
+        PlaceholderColor3 = Color3.fromRGB(120, 125, 135),
+        TextSize = 13, TextColor3 = THEME.Text, TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false, ZIndex = 43, Parent = keyRow,
+    })
+    local statusLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 16, 0, 130), Size = UDim2.new(1, -140, 0, 16),
+        Font = THEME.Font, Text = "Где ключ? Жми 👑 Получить ключ 😏", TextSize = 11,
+        TextColor3 = THEME.Accent2, TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42, Parent = card,
+    })
+    local getBtn = new("TextButton", {
+        BackgroundColor3 = THEME.Accent,
+        Position = UDim2.new(0, 16, 0, 154), Size = UDim2.new(0, 196, 0, 36),
+        Font = THEME.Font, Text = "👑 Получить ключ", TextSize = 13,
+        TextColor3 = Color3.fromRGB(255, 255, 255), ZIndex = 42, Parent = card,
+    })
+    makeCorner(getBtn, 8)
+    local checkBtn = new("TextButton", {
+        BackgroundColor3 = THEME.Success,
+        Position = UDim2.new(0, 228, 0, 154), Size = UDim2.new(0, 196, 0, 36),
+        Font = THEME.Font, Text = "🔓 Проверить", TextSize = 13,
+        TextColor3 = Color3.fromRGB(255, 255, 255), ZIndex = 42, Parent = card,
+    })
+    makeCorner(checkBtn, 8)
+    new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 16, 0, 200), Size = UDim2.new(1, -32, 0, 14),
+        Font = THEME.Font, Text = "ДС: discord.gg/gE6w5X64E3 · вступай, там угар 🎉",
+        TextSize = 10, TextColor3 = THEME.SubText, TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42, Parent = card,
+    })
+    local CARD_POS = UDim2.new(0.5, -290, 0.5, -123)
+    local funnyWrong = {
+        "Мимо! 🙏 Ключ сбежал — догони",
+        "Неправильно! Но звучало красиво 🍌",
+        "Холодно ❄️ Попробуй ещё разок",
+        "Кто-то пальчик промазал 👉⌨️",
+        "Не-а! Это ключ от соседней двери 🚪",
+    }
+    local function say(msg)
+        statusLbl.Text = msg
+    end
+    local function shake()
+        task.spawn(function()
+            for _, off in ipairs({6, -6, 4, -4, 0}) do
+                pcall(function()
+                    TweenService:Create(card, TweenInfo.new(0.05),
+                        {Position = UDim2.new(0.5, -290 + off, 0.5, -123)}):Play()
+                end)
+                task.wait(0.05)
+            end
+            pcall(function() card.Position = CARD_POS end)
+        end)
+    end
+    local function checkKey()
+        local typed = tostring(keyBox.Text or ""):gsub("%s", "")
+        if typed == "" then
+            say("Пусто?! Ключ сам себя не введёт 🤓")
+            shake()
+            return
+        end
+        if string.lower(typed) == string.lower("0x7CkeyMM2free") then
+            say("ВЕРНО! 🔓 Запускаю TeamGiga...")
+            KEY_OK = true
+            task.delay(0.55, function()
+                pcall(function() backdrop:Destroy() end)
+                if startMainUI then pcall(startMainUI) end
+            end)
+        else
+            say(funnyWrong[math.random(1, #funnyWrong)])
+            shake()
+        end
+    end
+    getBtn.MouseButton1Click:Connect(function()
+        pcall(function() setclipboard("https://discord.gg/gE6w5X64E3") end)
+        say("Ссылка на наш ДС скопирована! Вставь в браузер 🌐")
+    end)
+    checkBtn.MouseButton1Click:Connect(checkKey)
+    keyBox.FocusLost:Connect(function(enter)
+        if enter then checkKey() end
+    end)
+end
+
+startMainUI = function()
+-- ══════════════════ ШАГ 1: WELCOME (сначала он) ══════════════════
+local function playWelcome()
+pcall(function()
+    local wcHolder = new("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 50,
+        Parent = ScreenGui,
+    })
+    local wcLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        TextTransparency = 0,
+        Size = UDim2.new(0.85, 0, 0.35, 0),
+        Position = UDim2.new(0.075, 0, 0.3, 0),
+        Font = THEME.TitleFont,
+        Text = "WELCOME",
+        TextScaled = true,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        ZIndex = 51,
+        Parent = wcHolder,
+    })
+    local wcStroke = new("UIStroke", {Thickness = 3, Color = Color3.fromRGB(255, 0, 0), Parent = wcLbl})
+    local wcGrad = Instance.new("UIGradient")
+    wcGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255, 200, 0)),
+        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(0, 255, 80)),
+        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(0, 200, 255)),
+        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(170, 0, 255)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
+    })
+    wcGrad.Parent = wcLbl
+    -- Радужная анимация: градиент бежит, обводка крутит оттенки
+    task.spawn(function()
+        local t0 = os.clock()
+        while ScreenGui.Parent and wcHolder.Parent do
+            pcall(function()
+                local t = os.clock() - t0
+                wcGrad.Offset = Vector2.new((t * 0.5) % 1, 0)
+                wcStroke.Color = Color3.fromHSV((t * 0.6) % 1, 1, 1)
+            end)
+            task.wait(0.03)
+        end
+    end)
+    -- Скрыть через 3.5с: плавный фейд
+    task.delay(3.5, function()
+        pcall(function()
+            local out = TweenService:Create(wcLbl,
+                TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {TextTransparency = 1, BackgroundTransparency = 1})
+            out:Play()
+            TweenService:Create(wcStroke, TweenInfo.new(0.8), {Transparency = 1}):Play()
+            task.wait(0.85)
+            wcHolder:Destroy()
+        end)
+    end)
+end)
+end -- playWelcome
+
+-- ══════════════════ ШАГ 2: ОСНОВА (запускается после WELCOME) ══════════════════
+local function buildMain()
+
+local notifyHolder = new("Frame", {
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -12, 0, 12),
+    Size = UDim2.new(0, 280, 0, 400),
+    Parent = ScreenGui,
+})
+new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder,
+    HorizontalAlignment = Enum.HorizontalAlignment.Right, Parent = notifyHolder})
+
+local window = new("Frame", {
+    BackgroundColor3 = THEME.Background,
+    BackgroundTransparency = 0.3,
+    Position = UDim2.new(0, 40, 0.5, -230),
+    Size = UDim2.new(0, 640, 0, 460),
+    Active = true,
+    Parent = ScreenGui,
+})
+RegColor(window, "BackgroundColor3", "Background")
+makeCorner(window, 12)
+makeStroke(window, 1, "Stroke")
+
+local sidebar = new("Frame", {
+    BackgroundColor3 = THEME.Panel,
+    BackgroundTransparency = 0.4,
+    Size = UDim2.new(0, 152, 1, 0),
+    Parent = window,
+})
+RegColor(sidebar, "BackgroundColor3", "Panel")
+
+local logo = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 14, 0, 12),
+    Size = UDim2.new(1, -20, 0, 30),
+    Font = THEME.TitleFont,
+    TextSize = 20,
+    TextColor3 = THEME.Text,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = HUB_NAME,
+    Parent = sidebar,
+})
+RegFont(logo, "Font", "TitleFont")
+RegColor(logo, "TextColor3", "Text")
+
+local logoSub = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 14, 0, 40),
+    Size = UDim2.new(1, -20, 0, 14),
+    Font = THEME.Font,
+    TextSize = 10,
+    TextColor3 = THEME.SubText,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = SCRIPT_VERSION .. "  ·  Murder Mystery 2",
+    Parent = sidebar,
+})
+RegFont(logoSub, "Font", "Font")
+RegColor(logoSub, "TextColor3", "SubText")
+
+local tabHolder = new("Frame", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 0, 0, 62),
+    Size = UDim2.new(1, 0, 1, -120),
+    Parent = sidebar,
+})
+new("UIListLayout", {Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabHolder})
+new("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8),
+    PaddingTop = UDim.new(0, 4), Parent = tabHolder})
+
+local userBox = new("Frame", {
+    BackgroundColor3 = THEME.Element,
+    Position = UDim2.new(0, 8, 1, -48),
+    Size = UDim2.new(1, -16, 0, 36),
+    Parent = sidebar,
+})
+makeCorner(userBox, 8)
+RegColor(userBox, "BackgroundColor3", "Element")
+local avatar = new("Frame", {
+    BackgroundColor3 = THEME.Background,
+    Position = UDim2.new(0, 5, 0.5, -12),
+    Size = UDim2.new(0, 24, 0, 24),
+    Parent = userBox,
+})
+makeCorner(avatar, 12)
+RegColor(avatar, "BackgroundColor3", "Background")
+-- Неоновое кольцо с градиентом (синий -> красный) - крутой статус как в NEVERWIN
+local avatarRing = new("UIStroke", {Thickness = 2, Color = THEME.Accent, Parent = avatar})
+RegColor(avatarRing, "Color", "Accent")
+pcall(function()
+    local grad = Instance.new("UIGradient")
+    grad.Color = ColorSequence.new(THEME.Accent, THEME.Danger)
+    grad.Parent = avatarRing
+end)
+-- Зелёная точка "онлайн" в углу юзербокса
+local onlineDot = new("Frame", {
+    BackgroundColor3 = THEME.Success,
+    AnchorPoint = Vector2.new(1, 1),
+    Position = UDim2.new(1, -3, 1, -3),
+    Size = UDim2.new(0, 8, 0, 8),
+    Parent = userBox,
+})
+makeCorner(onlineDot, 4)
+RegColor(onlineDot, "BackgroundColor3", "Success")
+local avatarLbl = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 1, 0),
+    Font = THEME.TitleFont,
+    TextSize = 14,
+    TextColor3 = THEME.Text,
+    Text = "G",
+    Parent = avatar,
+})
+RegFont(avatarLbl, "Font", "TitleFont")
+RegColor(avatarLbl, "TextColor3", "Text")
+local userLbl = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 34, 0, 0),
+    Size = UDim2.new(1, -40, 1, 0),
+    Font = THEME.Font,
+    TextSize = 11,
+    TextColor3 = THEME.Text,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+    Text = LocalPlayer.Name,
+    Parent = userBox,
+})
+RegFont(userLbl, "Font", "Font")
+RegColor(userLbl, "TextColor3", "Text")
+do
+    local okName, name = pcall(function() return LocalPlayer.Name end)
+    if okName and type(name) == "string" and name ~= "" then
+        avatarLbl.Text = string.upper(string.sub(name, 1, 1))
+        userLbl.Text = name
+    end
+end
+
+local byline = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 8, 1, -14),
+    Size = UDim2.new(1, -16, 0, 12),
+    Font = THEME.Font,
+    TextSize = 9,
+    TextColor3 = THEME.SubText,
+    TextXAlignment = Enum.TextXAlignment.Center,
+    Text = AUTHOR,
+    Parent = sidebar,
+})
+RegFont(byline, "Font", "Font")
+RegColor(byline, "TextColor3", "SubText")
+
+local content = new("Frame", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 152, 0, 0),
+    Size = UDim2.new(1, -152, 1, -26),
+    Parent = window,
+})
+
+-- ✨ Анимированный фон контента: сине-белый перелив (волна ходит туда-сюда)
+local animBg = new("Frame", {
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 0.05,
+    Size = UDim2.new(1, 0, 1, 0),
+    ZIndex = 0,
+    Parent = content,
+})
+makeCorner(animBg, 10)
+-- Просто синие-белые ПОЛОСКИ (без анимации)
+local animGrad = Instance.new("UIGradient")
+animGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(70, 155, 255)),
+    ColorSequenceKeypoint.new(0.12, Color3.fromRGB(238, 246, 255)),
+    ColorSequenceKeypoint.new(0.25, Color3.fromRGB(70, 155, 255)),
+    ColorSequenceKeypoint.new(0.38, Color3.fromRGB(238, 246, 255)),
+    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(70, 155, 255)),
+    ColorSequenceKeypoint.new(0.62, Color3.fromRGB(238, 246, 255)),
+    ColorSequenceKeypoint.new(0.75, Color3.fromRGB(70, 155, 255)),
+    ColorSequenceKeypoint.new(0.88, Color3.fromRGB(238, 246, 255)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(70, 155, 255)),
+})
+animGrad.Parent = animBg
+
+-- ══════════════════ ВКЛАДКИ ══════════════════
+local tabButtons, pages = {}, {}
+local currentTab = nil
+local widgetOrder = 0
+local function nextOrder()
+    widgetOrder = widgetOrder + 1
+    return widgetOrder
+end
+
+local function refreshTabColors()
+    for _, t in ipairs(tabButtons) do
+        local selected = (t.name == currentTab)
+        t.lbl.TextColor3 = selected and THEME.Text or THEME.SubText
+        t.icon.TextColor3 = selected and THEME.Accent or THEME.SubText
+        t.bar.Visible = selected
+    end
+end
+OnThemeChange(refreshTabColors)
+
+local function switchTab(name)
+    currentTab = name
+    for n, page in pairs(pages) do page.Visible = (n == name) end
+    refreshTabColors()
+end
+
+local function AddTabLabel(text)
+    local lbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 20),
+        Font = THEME.Font,
+        TextSize = 9,
+        TextColor3 = THEME.SubText,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = string.upper(text),
+        LayoutOrder = nextOrder(),
+        Parent = tabHolder,
+    })
+    RegisterText(lbl, string.upper(text), true)
+    RegFont(lbl, "Font", "Font")
+    RegColor(lbl, "TextColor3", "SubText")
+end
+
+local function AddTab(icon, name)
+    local btn = new("TextButton", {
+        Text = "",
+        BackgroundTransparency = true,
+        Size = UDim2.new(1, 0, 0, 28),
+        AutoButtonColor = true,
+        LayoutOrder = nextOrder(),
+        Parent = tabHolder,
+    })
+    local bar = new("Frame", {
+        BackgroundColor3 = THEME.Accent,
+        Size = UDim2.new(0, 3, 0, 14),
+        Position = UDim2.new(0, 0, 0.5, -7),
+        Visible = false,
+        Parent = btn,
+    })
+    makeCorner(bar, 2)
+    RegColor(bar, "BackgroundColor3", "Accent")
+    local iconLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(0, 20, 1, 0),
+        Font = THEME.Font,
+        TextSize = 13,
+        TextColor3 = THEME.SubText,
+        Text = icon,
+        Parent = btn,
+    })
+    RegFont(iconLbl, "Font", "Font")
+    RegColor(iconLbl, "TextColor3", "SubText")
+    local lbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 36, 0, 0),
+        Size = UDim2.new(1, -40, 1, 0),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextColor3 = THEME.SubText,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = name,
+        Parent = btn,
+    })
+    RegisterText(lbl, name)
+    RegFont(lbl, "Font", "Font")
+    RegColor(lbl, "TextColor3", "SubText")
+
+    local page = new("ScrollingFrame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        Visible = false,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        BorderSizePixel = 0,
+        Parent = content,
+    })
+    RegColor(page, "ScrollBarImageColor3", "Accent")
+    new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page})
+    new("UIPadding", {
+        PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12),
+        PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12),
+        Parent = page,
+    })
+
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+    tabButtons[#tabButtons + 1] = {name = name, btn = btn, lbl = lbl, icon = iconLbl, bar = bar}
+    pages[name] = page
+    refreshTabColors()
+    return page
+end
+
+-- ══════════════════ КАРТОЧКИ ══════════════════
+local rowMeta = {}
+local function ensureRow(page)
+    rowMeta[page] = rowMeta[page] or {}
+    local rows = rowMeta[page]
+    local last = rows[#rows]
+    if last and last.count < 2 then
+        return last
+    end
+    local rowF = new("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = nextOrder(),
+        Parent = page,
+    })
+    new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Left, Parent = rowF})
+    local entry = {frame = rowF, count = 0}
+    rows[#rows + 1] = entry
+    return entry
+end
+
+local function AddCard(page, title, half)
+    local entry = ensureRow(page)
+    entry.count = entry.count + 1
+    local width = UDim2.new(1, -8, 0, 0)
+    if half then
+        width = UDim2.new(0.5, -4, 0, 0)
+    end
+    local card = new("Frame", {
+        BackgroundColor3 = THEME.Element,
+        BackgroundTransparency = 0.45,
+        Size = width,
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = entry.frame,
+    })
+    makeCorner(card, 10)
+    makeStroke(card)
+    RegColor(card, "BackgroundColor3", "Element")
+    local header = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(1, -24, 0, 34),
+        Font = THEME.TitleFont,
+        TextSize = 14,
+        TextColor3 = THEME.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = title,
+        Parent = card,
+    })
+    RegisterText(header, title)
+    RegFont(header, "Font", "TitleFont")
+    RegColor(header, "TextColor3", "Text")
+    local body = new("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 36),
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = card,
+    })
+    new("UIListLayout", {Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder, Parent = body})
+    new("UIPadding", {
+        PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10),
+        Parent = body,
+    })
+    return body
+end
+
+local function AddLabel(parent, text, colorKey, height)
+    local lbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, height or 18),
+        Font = THEME.Font,
+        TextSize = 11,
+        TextColor3 = THEME[colorKey or "SubText"],
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = text,
+        LayoutOrder = nextOrder(),
+        Parent = parent,
+    })
+    RegisterText(lbl, text)
+    RegFont(lbl, "Font", "Font")
+    RegColor(lbl, "TextColor3", colorKey or "SubText")
+    return lbl
+end
+
+local function AddToggle(parent, label, default, callback, settingsKey)
+    local row = new("TextButton", {
+        Text = "", AutoButtonColor = false,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 28),
+        LayoutOrder = nextOrder(),
+        Parent = parent,
+    })
+    local lbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 2, 0, 0),
+        Size = UDim2.new(1, -60, 1, 0),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextColor3 = THEME.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = label,
+        Parent = row,
+    })
+    RegisterText(lbl, label)
+    RegFont(lbl, "Font", "Font")
+    RegColor(lbl, "TextColor3", "Text")
+    local sw = new("Frame", {
+        BackgroundColor3 = THEME.Element,
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, 0, 0.5, 0),
+        Size = UDim2.new(0, 36, 0, 19),
+        Parent = row,
+    })
+    makeCorner(sw, 10)
+    RegColor(sw, "BackgroundColor3", "Element")
+    local knob = new("Frame", {
+        BackgroundColor3 = THEME.SubText,
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 3, 0.5, 0),
+        Size = UDim2.new(0, 13, 0, 13),
+        Parent = sw,
+    })
+    makeCorner(knob, 7)
+    RegColor(knob, "BackgroundColor3", "SubText")
+
+    local state = default and true or false
+    local function setVisual(s)
+        state = s and true or false
+        local targetPos = state and UDim2.new(1, -3, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+        local targetCol = state and THEME.Accent or THEME.SubText
+        local swCol = state and THEME.Accent or THEME.Element
+        TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {Position = targetPos, BackgroundColor3 = targetCol}):Play()
+        TweenService:Create(sw, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundColor3 = swCol}):Play()
+    end
+    row.MouseButton1Click:Connect(function()
+        setVisual(not state)
+        if callback then pcall(callback, state) end
+    end)
+    setVisual(state)
+    if settingsKey then UISync[settingsKey] = setVisual end
+    return setVisual
+end
+
+local function AddSlider(parent, label, min, max, default, callback, decimal)
+    local holder = new("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 44),
+        LayoutOrder = nextOrder(),
+        Parent = parent,
+    })
+    local lbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 2, 0, 0),
+        Size = UDim2.new(1, -80, 0, 16),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextColor3 = THEME.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = label,
+        Parent = holder,
+    })
+    RegisterText(lbl, label)
+    RegFont(lbl, "Font", "Font")
+    RegColor(lbl, "TextColor3", "Text")
+    local valLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, 0, 0, 0),
+        Size = UDim2.new(0, 60, 0, 16),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextColor3 = THEME.Text,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Text = "",
+        Parent = holder,
+    })
+    RegFont(valLbl, "Font", "Font")
+    RegColor(valLbl, "TextColor3", "Text")
+    local hit = new("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 2, 0, 24),
+        Size = UDim2.new(1, -4, 0, 16),
+        Parent = holder,
+    })
+    local track = new("Frame", {
+        BackgroundColor3 = THEME.Element,
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        Size = UDim2.new(1, 0, 0, 5),
+        Parent = hit,
+    })
+    makeCorner(track, 3)
+    RegColor(track, "BackgroundColor3", "Element")
+    local fill = new("Frame", {
+        BackgroundColor3 = THEME.Accent,
+        Size = UDim2.new(0, 0, 1, 0),
+        Parent = track,
+    })
+    makeCorner(fill, 3)
+    RegColor(fill, "BackgroundColor3", "Accent")
+    local knob = new("Frame", {
+        BackgroundColor3 = THEME.Accent,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        Size = UDim2.new(0, 12, 0, 12),
+        Parent = hit,
+    })
+    makeCorner(knob, 6)
+    RegColor(knob, "BackgroundColor3", "Accent")
+
+    local function setValue(v, fire)
+        v = math.clamp(v, min, max)
+        local frac = (max - min) > 0 and (v - min) / (max - min) or 0
+        fill.Size = UDim2.new(frac, 0, 1, 0)
+        knob.Position = UDim2.new(frac, 0, 0.5, 0)
+        if decimal then
+            valLbl.Text = string.format("%.1f", v)
+        else
+            valLbl.Text = tostring(math.floor(v + 0.5))
+        end
+        if fire and callback then pcall(callback, v) end
+    end
+
+    local dragging = false
+    hit.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+    Connect(UserInputService.InputChanged, function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+                and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                dragging = false
+                return
+            end
+            local mouseX = UserInputService:GetMouseLocation().X
+            local frac = math.clamp((mouseX - hit.AbsolutePosition.X) / math.max(hit.AbsoluteSize.X, 1), 0, 1)
+            setValue(min + frac * (max - min), true)
+        end
+    end)
+    Connect(UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    setValue(default, false)
+    return setValue
+end
+
+local function AddButton(parent, text, callback, colorKey)
+    local btn = new("TextButton", {
+        BackgroundColor3 = THEME[colorKey or "Element"],
+        Size = UDim2.new(1, 0, 0, 30),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextColor3 = THEME.Text,
+        Text = text,
+        AutoButtonColor = true,
+        LayoutOrder = nextOrder(),
+        Parent = parent,
+    })
+    makeCorner(btn, 8)
+    RegisterText(btn, text)
+    RegColor(btn, "BackgroundColor3", colorKey or "Element")
+    RegFont(btn, "Font", "Font")
+    RegColor(btn, "TextColor3", "Text")
+    btn.MouseButton1Click:Connect(function() pcall(callback) end)
+    return btn
+end
+
+Notify = function(title, text, dur, color)
+    if not Settings.Notifications then return end
+    dur = dur or 3
+    local n = new("Frame", {
+        BackgroundColor3 = THEME.Element,
+        Size = UDim2.new(0, 260, 0, 0),
+        LayoutOrder = -os.clock(),
+        Parent = notifyHolder,
+    })
+    makeCorner(n, 10)
+    local st = new("UIStroke", {Thickness = 1, Color = color or THEME.Accent, Parent = n})
+    RegColor(st, "Color", "Accent")
+    local ttl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 5),
+        Size = UDim2.new(1, -20, 0, 18),
+        Font = THEME.Font,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextColor3 = THEME.Text,
+        Text = title,
+        Parent = n,
+    })
+    RegFont(ttl, "Font", "Font")
+    RegColor(ttl, "TextColor3", "Text")
+    local msg = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 23),
+        Size = UDim2.new(1, -20, 1, -29),
+        Font = THEME.Font,
+        TextSize = 11,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextColor3 = THEME.SubText,
+        Text = text,
+        Parent = n,
+    })
+    RegFont(msg, "Font", "Font")
+    RegColor(msg, "TextColor3", "SubText")
+    TweenService:Create(n, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Size = UDim2.new(0, 260, 0, 58)}):Play()
+    task.delay(dur, function()
+        pcall(function()
+            local out = TweenService:Create(n, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                {Size = UDim2.new(0, 260, 0, 0)})
+            out.Completed:Connect(function() n:Destroy() end)
+            out:Play()
+        end)
+    end)
+end
+
+-- ══════════════════ ВКЛАДКИ-КОНТЕНТ ══════════════════
+AddTabLabel("Игрок")
+local tabMove = AddTab("🏃", "Игрок")
+local tabEsp  = AddTab("👁", "ESP")
+AddTabLabel("Комбат")
+local tabAim  = AddTab("🎯", "Аим")
+AddTabLabel("Система")
+local tabInfo = AddTab("⚙", "Инфо")
+
+-- ── 🏃 ИГРОК ──
+local cardSpeed = AddCard(tabMove, "SpeedHack", true)
+UISync.SpeedHack = AddToggle(cardSpeed, "Включить", Settings.SpeedHack, function(v)
+    Settings.SpeedHack = v
+    if not v and Humanoid and Humanoid.Parent then
+        pcall(function() Humanoid.WalkSpeed = 16 end)
+    end
+    if Notify then Notify("SpeedHack", v and ("Цель: " .. Settings.Speed) or "выключен", 2, v and THEME.Success or THEME.Danger) end
+end, "SpeedHack")
+UISync.Speed = AddSlider(cardSpeed, "Скорость", 16, 500, Settings.Speed, function(v)
+    Settings.Speed = v
+end)
+AddLabel(cardSpeed, "Скорость держится постоянно. Выключил тумблер — вернулась 16", nil, 28)
+
+local cardJump = AddCard(tabMove, "Inf Jump", true)
+UISync.InfJump = AddToggle(cardJump, "Бесконечные прыжки", Settings.InfJump, function(v)
+    Settings.InfJump = v
+    if Notify then Notify("Inf Jump", v and "Прыгай в воздухе!" or "выключен", 2, v and THEME.Success or THEME.Danger) end
+end, "InfJump")
+AddLabel(cardJump, "Прыжок работает даже в воздухе", nil, 28)
+
+-- ── 👁 ESP ──
+local cardEspMain = AddCard(tabEsp, "ESP на роли", false)
+UISync.ESP = AddToggle(cardEspMain, "ESP включено", Settings.ESP, function(v)
+    Settings.ESP = v
+    if Notify then Notify("ESP", v and "Роли видны сквозь стены" or "выключено", 2, v and THEME.Success or THEME.Danger) end
+end, "ESP")
+UISync.EspMurderer = AddToggle(cardEspMain, "🔪 Убийца (красный)", Settings.EspMurderer, function(v)
+    Settings.EspMurderer = v
+end, "EspMurderer")
+UISync.EspSheriff = AddToggle(cardEspMain, "⭐ Шериф (синий)", Settings.EspSheriff, function(v)
+    Settings.EspSheriff = v
+end, "EspSheriff")
+UISync.EspInnocent = AddToggle(cardEspMain, "🧑 Мирные (зелёный)", Settings.EspInnocent, function(v)
+    Settings.EspInnocent = v
+end, "EspInnocent")
+UISync.EspGlow = AddToggle(cardEspMain, "Подсветка (Glow)", Settings.EspGlow, function(v)
+    Settings.EspGlow = v
+end, "EspGlow")
+UISync.EspNick = AddToggle(cardEspMain, "Ник", Settings.EspNick, function(v)
+    Settings.EspNick = v
+end, "EspNick")
+UISync.EspDist = AddToggle(cardEspMain, "Дистанция", Settings.EspDist, function(v)
+    Settings.EspDist = v
+end, "EspDist")
+
+local cardWeapon = AddCard(tabEsp, "Оружие шерифа", false)
+UISync.WeaponESP = AddToggle(cardWeapon, "ВХ на оружие (жёлтое)", Settings.WeaponESP, function(v)
+    Settings.WeaponESP = v
+    if Notify then Notify("ВХ Оружие", v and "Оружие подсвечивается" or "выключено", 2, THEME.Accent) end
+end, "WeaponESP")
+UISync.WeaponAutoTP = AddToggle(cardWeapon, "Авто-ТП когда оружие выпало", Settings.WeaponAutoTP, function(v)
+    Settings.WeaponAutoTP = v
+    if Notify then Notify("Авто-ТП", v and "ТП к оружию в момент дропа!" or "выключено", 3, v and THEME.Success or THEME.Danger) end
+end, "WeaponAutoTP")
+AddButton(cardWeapon, "🔫 ТП к оружию СЕЙЧАС", function() tpToWeapon() end)
+AddLabel(cardWeapon, "Шериф умер -> пушка на земле -> ВХ жёлтым + мгновенный ТП", nil, 28)
+
+-- ── 🎯 АИМ ──
+local cardAim = AddCard(tabAim, "Silent Aim", false)
+local aimModeBtn
+aimModeBtn = AddButton(cardAim, "Режим: ПО БИНДУ (зажимай)", function()
+    if Settings.AimMode == "HOLD" then
+        Settings.AimMode = "ALWAYS"
+        aimModeBtn.Text = "Режим: ВСЕГДА (сам целится)"
+    else
+        Settings.AimMode = "HOLD"
+        aimModeBtn.Text = "Режим: ПО БИНДУ (зажимай)"
+    end
+    if Notify then Notify("AIM", Settings.AimMode == "HOLD" and "Работает когда зажимаешь E/ПКМ" or "Целится САМ без клавиш!", 3, THEME.Accent) end
+end)
+UISync.AimOn = AddToggle(cardAim, "AIM включено", Settings.AimOn, function(v)
+    Settings.AimOn = v
+    if v then
+        local how = "Зажимай [" .. Settings.AimKey .. "]" .. (Settings.AimRMB and " или ПКМ" or "") .. " — прицел сам доведёт!"
+        Notify("AIM ВКЛЮЧЁН", how, 4, THEME.Success)
+    else
+        Notify("AIM", "выключен", 2, THEME.Danger)
+    end
+end, "AimOn")
+UISync.AimOnlyMurderer = AddToggle(cardAim, "Только в УБИЙЦУ", Settings.AimOnlyMurderer, function(v)
+    Settings.AimOnlyMurderer = v
+    if Notify then Notify("AIM", v and "Целимся только в убийцу (для шерифа!)" or "Ближайшая цель", 3, THEME.Accent) end
+end, "AimOnlyMurderer")
+UISync.AimRMB = AddToggle(cardAim, "ПКМ тоже наводит", Settings.AimRMB, function(v)
+    Settings.AimRMB = v
+end, "AimRMB")
+UISync.AimMouseMode = AddToggle(cardAim, "Легит-режим (через мышь)", Settings.AimMouseMode, function(v)
+    Settings.AimMouseMode = v
+    if Notify then Notify("AIM", v and "Легит: движение мыши" or "Камера: сильное доведение", 2, THEME.Accent) end
+end, "AimMouseMode")
+UISync.FovShow = AddToggle(cardAim, "FOV-круг (включай если нужен)", Settings.FovShow, function(v)
+    Settings.FovShow = v
+    if not v then destroyFovCircle() end
+    if Notify then Notify("FOV-круг", v and "Включён" or "Выключен (безопаснее)", 2, THEME.Accent) end
+end, "FovShow")
+UISync.AimSmooth = AddSlider(cardAim, "Плавность (1 = резко)", 1, 10, Settings.AimSmooth, function(v)
+    Settings.AimSmooth = v
+end)
+UISync.AimFov = AddSlider(cardAim, "Радиус захвата FOV", 50, 800, Settings.AimFov, function(v)
+    Settings.AimFov = v
+end)
+AddLabel(cardAim, "Цель = ближайшая к твоему курсору (как в хабах)", "Accent2", 18)
+AddLabel(cardAim, "Легит-совет: Плавность 6-8 + FOV 150", nil, 18)
+
+local cardBind = AddCard(tabAim, "Бинд аима", true)
+local bindRow = new("TextButton", {
+    Text = "", AutoButtonColor = false,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 0, 30),
+    LayoutOrder = nextOrder(),
+    Parent = cardBind,
+})
+local bindLbl = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 2, 0, 0),
+    Size = UDim2.new(1, -110, 1, 0),
+    Font = THEME.Font,
+    TextSize = 12,
+    TextColor3 = THEME.Text,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "Клавиша аима (удерживать):",
+    Parent = bindRow,
+})
+RegFont(bindLbl, "Font", "Font")
+RegColor(bindLbl, "TextColor3", "Text")
+BindButton = new("TextButton", {
+    BackgroundColor3 = THEME.Background,
+    AnchorPoint = Vector2.new(1, 0.5),
+    Position = UDim2.new(1, 0, 0.5, 0),
+    Size = UDim2.new(0, 90, 0, 26),
+    Font = THEME.Font,
+    TextSize = 12,
+    TextColor3 = THEME.Accent,
+    Text = Settings.AimKey,
+    AutoButtonColor = true,
+    Parent = bindRow,
+})
+makeCorner(BindButton, 8)
+RegColor(BindButton, "BackgroundColor3", "Background")
+RegFont(BindButton, "Font", "Font")
+RegColor(BindButton, "TextColor3", "Accent")
+BindButton.MouseButton1Click:Connect(function()
+    waitingBindTarget = "aim"
+    BindButton.Text = "..."
+end)
+AddLabel(cardBind, "Нажми кнопку, затем нажми новую клавишу (Esc — отмена)", nil, 28)
+
+-- Отдел ТП удалён
+
+-- ── ⚙ ИНФО ──
+local cardAbout = AddCard(tabInfo, "О скрипте", true)
+AddLabel(cardAbout, "TEAMGIGA " .. SCRIPT_VERSION, "Accent2", 18)
+AddLabel(cardAbout, "Игра: Murder Mystery 2", nil, 18)
+AddLabel(cardAbout, AUTHOR, "Accent2", 18)
+
+local cardDiag = AddCard(tabInfo, "Диагностика", true)
+local diag1 = AddLabel(cardDiag, "Персонаж: ...", nil, 18)
+local diag2 = AddLabel(cardDiag, "Аим привязан: ...", nil, 18)
+local diag3 = AddLabel(cardDiag, "mousemoverel: ...", nil, 18)
+local diag4 = AddLabel(cardDiag, "Игрок в сервере: ...", nil, 18)
+local diag5 = AddLabel(cardDiag, "Оружие на карте: ...", nil, 18)
+task.spawn(function()
+    while scriptAlive do
+        task.wait(2)
+        pcall(function()
+            if diag1 then diag1.Text = t("Персонаж: ") .. (Humanoid and Humanoid.Parent and "OK" or "-") end
+            if diag2 then diag2.Text = t("Аим привязан: ") .. aimBindState end
+            if diag3 then diag3.Text = t("mousemoverel: ") .. (type(mousemoverel) == "function" and "YES" or "no") end
+            if diag4 then diag4.Text = t("Игрок в сервере: ") .. #Players:GetPlayers() end
+            if diag5 then diag5.Text = t("Оружие на карте: ") .. ((droppedGun ~= nil) and "YES" or "no") end
+        end)
+    end
+end)
+
+local cardCtrl = AddCard(tabInfo, "Управление", false)
+AddLabel(cardCtrl, "[E] / ПКМ (удерживать) — аим, работает сразу", nil, 18)
+AddLabel(cardCtrl, "RightCtrl — скрыть/показать меню", nil, 18)
+AddLabel(cardCtrl, "Авто-ТП к оружию — вкладка ESP", nil, 18)
+AddButton(cardCtrl, "❌ Выгрузить скрипт", function() if Unload then Unload() end end, "Danger")
+
+-- ── 🌐 СЕТТИНГ ──
+AddTabLabel("Настройки")
+local tabSet = AddTab("🌐", "Сеттинг")
+local cardLang = AddCard(tabSet, "Язык / Language", true)
+AddButton(cardLang, "🇷🇺 Русский", function()
+    CurrentLang = "RU"
+    ApplyLanguage()
+    if Notify then Notify("Язык", "Русский", 2, THEME.Success) end
+end)
+AddButton(cardLang, "🇬🇧 English", function()
+    CurrentLang = "EN"
+    ApplyLanguage()
+    if Notify then Notify("Language", "English selected", 2, THEME.Success) end
+end)
+AddLabel(cardLang, "Переключает весь интерфейс сразу", "Accent2", 18)
+
+-- ══════════════════ ДРАГ / КНОПКИ ══════════════════
+local dragBar = new("Frame", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 152, 0, 0),
+    Size = UDim2.new(1, -210, 0, 26),
+    Parent = window,
+})
+
+local closeBtn = new("TextButton", {
+    BackgroundColor3 = THEME.Element,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -8, 0, 8),
+    Size = UDim2.new(0, 24, 0, 24),
+    Font = THEME.Font,
+    TextSize = 12,
+    TextColor3 = THEME.Danger,
+    Text = "✕",
+    AutoButtonColor = true,
+    Parent = window,
+})
+makeCorner(closeBtn, 6)
+RegColor(closeBtn, "BackgroundColor3", "Element")
+RegFont(closeBtn, "Font", "Font")
+RegColor(closeBtn, "TextColor3", "Danger")
+
+local minBtn = new("TextButton", {
+    BackgroundColor3 = THEME.Element,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -38, 0, 8),
+    Size = UDim2.new(0, 24, 0, 24),
+    Font = THEME.Font,
+    TextSize = 14,
+    TextColor3 = THEME.Text,
+    Text = "—",
+    AutoButtonColor = true,
+    Parent = window,
+})
+makeCorner(minBtn, 6)
+RegColor(minBtn, "BackgroundColor3", "Element")
+RegFont(minBtn, "Font", "Font")
+RegColor(minBtn, "TextColor3", "Text")
+
+local dragging = false
+local dragStart, startPos
+local function beginDrag(input)
+    dragging = true
+    dragStart = input.Position
+    startPos = window.Position
+end
+dragBar.InputBegan:Connect(beginDrag)
+logo.InputBegan:Connect(beginDrag)
+Connect(UserInputService.InputChanged, function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        -- ФИКС "сам прицепляется": если ЛКМ уже отпущена — сразу прекращаем драг
+        if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+            dragging = false
+            return
+        end
+        local delta = input.Position - dragStart
+        window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+Connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+
+local minimized = false
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    local target = minimized and UDim2.new(0, 640, 0, 46) or UDim2.new(0, 640, 0, 460)
+    TweenService:Create(window, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = target}):Play()
+    task.delay(0.1, function()
+        sidebar.Visible = not minimized
+        content.Visible = not minimized
+    end)
+end)
+closeBtn.MouseButton1Click:Connect(function()
+    if Unload then Unload() end
+end)
+local uiVisible = true
+local function setWindowVisible(on)
+    -- Плавное открытие/закрытие: фейд + лёгкое масштабирование
+    if on then
+        window.Visible = true
+        window.BackgroundTransparency = 1
+        TweenService:Create(window, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 0.3}):Play()
+        local startSize = UDim2.new(0, 640, 0, 420)
+        window.Size = startSize
+        TweenService:Create(window, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {Size = UDim2.new(0, 640, 0, 460)}):Play()
+    else
+        local tw = TweenService:Create(window, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+            {BackgroundTransparency = 1, Size = UDim2.new(0, 640, 0, 420)})
+        tw.Completed:Connect(function()
+            if not uiVisible then window.Visible = false end
+        end)
+        tw:Play()
+    end
+end
+toggleGui = function()
+    uiVisible = not uiVisible
+    setWindowVisible(uiVisible)
+end
+
+-- ══════════════════ ВВОД (бинд аима) ══════════════════
+Connect(UserInputService.InputBegan, function(input, gp)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        holdAimRMB = true
+        return
+    end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    local k = input.KeyCode
+    if waitingBindTarget then
+        if k ~= Enum.KeyCode.Escape then
+            Settings.AimKey = k.Name
+            if BindButton then BindButton.Text = k.Name end
+            if Notify then Notify("Бинд", "AIM -> " .. k.Name, 2, THEME.Success) end
+        else
+            if Notify then Notify("Бинд", "Отменено", 2, THEME.Danger) end
+        end
+        waitingBindTarget = nil
+        return
+    end
+    if k == Enum.KeyCode.RightControl then
+        toggleGui()
+        return
+    end
+    if not gp and k.Name == Settings.AimKey then
+        holdAimKey = true
+    end
+end)
+
+Connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        holdAimRMB = false
+        return
+    end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if input.KeyCode.Name == Settings.AimKey then
+        holdAimKey = false
+    end
+end)
+
+-- ══════════════════ АНТИ-АФК ══════════════════
+Connect(LocalPlayer.Idled, function()
+    if Settings.AntiAFK then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end
+end)
+
+-- ══════════════════ ВЫГРУЗКА ══════════════════
+Unload = function()
+    scriptAlive = false
+    -- Плавное закрытие перед уничтожением
+    pcall(function()
+        window.BackgroundTransparency = 1
+        window.Visible = false
+    end)
+    destroyFovCircle()
+    destroyWeaponEsp()
+    pcall(function()
+        if Humanoid and Humanoid.Parent then Humanoid.WalkSpeed = 16 end
+    end)
+    for _, e in pairs(EspEntries) do
+        pcall(function() if e.billboard then e.billboard:Destroy() end end)
+        pcall(function() if e.highlight then e.highlight:Destroy() end end)
+    end
+    for _, c in ipairs(Connections) do pcall(function() c:Disconnect() end) end
+    Connections = {}
+    pcall(function() ScreenGui:Destroy() end)
+    print("[TeamGiga MM2] выгружен")
+end
+
+-- ══════════════════ СТАРТ ══════════════════
+switchTab("Игрок")
+
+task.delay(1.5, function()
+    if Notify then
+        local mur, sher = 0, 0
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl ~= LocalPlayer then
+                local r = getRole(pl)
+                if r == "MURDERER" then mur = mur + 1 end
+                if r == "SHERIFF" then sher = sher + 1 end
+            end
+        end
+        Notify("TEAMGIGA " .. SCRIPT_VERSION,
+            "Готов! AIM = [" .. Settings.AimKey .. "]/ПКМ. Сейчас в раунде: убийц " .. mur .. ", шерифов " .. sher,
+            6, THEME.Accent)
+    end
+end)
+
+end -- конец buildMain
+
+-- Сначала WELCOME, через ~2.8с плавно поднимается основное меню
+playWelcome()
+task.delay(2.8, function()
+    if scriptAlive and KEY_OK then pcall(buildMain) end
+end)
+end -- конец startMainUI (запуск после верного ключа)
+
+print("[TeamGiga MM2 " .. SCRIPT_VERSION .. "] загружен — жду ключ 0x7C...")
+
+end) -- конец pcall-обёртки
+
+if not TG_OK then
+    local msg = tostring(TG_ERR)
+    warn("[TeamGiga MM2] ОШИБКА ЗАПУСКА: " .. msg)
+    pcall(function() messagebox(string.sub(msg, 1, 250), "TeamGiga MM2 - ОШИБКА", 0) end)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "TEAMGIGA MM2 - ОШИБКА!",
+            Text = string.sub(msg, 1, 100),
+            Duration = 20
+        })
+    end)
+else
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "TeamGiga MM2 v2.7",
+            Text = "Скрипт загружен! Введи ключ 0x7C 😼",
+            Duration = 6
+        })
+    end)
+end
